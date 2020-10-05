@@ -32,5 +32,6 @@ const app = express_1.default();
 app.use(body_parser_1.default.json());
 app.use(body_parser_1.default.urlencoded({ extended: true }));
 app.use('/auth', router_1.default());
+app.use('/health', (_, res) => res.status(200).send({ status: "up" }));
 app.listen(port, () => console.log(`Running on port ${port}`));
 //# sourceMappingURL=index.js.map

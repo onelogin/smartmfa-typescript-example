@@ -1,14 +1,21 @@
 version: "3"
 
 services:
-  backend:
+  ts_backend:
     build: .
     tty: true
     stdin_open: true
+    container_name: backend
+    env_file:
+      - .env
     volumes:
       - .:/usr/src/app
       - /usr/src/app/node_modules
     ports:
-      - "8080:8080"
-    env_file:
-      - .env
+      - "8082:8082"
+    networks:
+      - testbed
+
+networks:
+  testbed:
+    external: true

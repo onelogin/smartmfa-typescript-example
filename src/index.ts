@@ -1,5 +1,5 @@
 import * as dotenv from "dotenv"
-import express from "express";
+import express, {Response} from "express";
 import bodyParser from "body-parser";
 import axios, {AxiosRequestConfig} from "axios";
 
@@ -13,6 +13,7 @@ const app = express();
 app.use( bodyParser.json() );
 app.use( bodyParser.urlencoded({ extended:true }) );
 app.use('/auth', AuthRoutes());
+app.use('/health', (_, res: Response) => res.status(200).send({status: "up"}));
 
 
 app.listen(port, () => console.log(`Running on port ${port}`));
