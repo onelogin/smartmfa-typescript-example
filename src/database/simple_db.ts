@@ -1,4 +1,3 @@
-import {User} from "../models/user"
 import {Database, DBItem} from "./db_interfaces"
 
 export default class SimpleDatabase<T extends DBItem> implements Database<DBItem> {
