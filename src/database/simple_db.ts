@@ -1,10 +1,10 @@
-import { User } from "../models/user"
-import { Database, DBItem } from "./db_interfaces"
+import {User} from "../models/user"
+import {Database, DBItem} from "./db_interfaces"
 
-class SimpleDatabase<T extends DBItem> implements Database<DBItem> {
-  table: { [id: string]: T }
+export default class SimpleDatabase<T extends DBItem> implements Database<DBItem> {
+  table: {[id: string]: T}
 
-  constructor(table: {[id: string]: T}){
+  constructor(table: {[id: string]: T}) {
     this.table = table
   }
 
@@ -26,5 +26,3 @@ class SimpleDatabase<T extends DBItem> implements Database<DBItem> {
     return true
   }
 }
-
-export default SimpleDatabase

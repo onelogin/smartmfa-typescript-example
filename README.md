@@ -52,7 +52,7 @@ curl -X POST localhost:8080/auth/signup -H "Content-Type: application/json" -d'{
   "context": {
     "ip": "<your ip>",
     "user_agent": "Mozilla/5.0 (Macintosh Intel Mac OS X 10_11_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.87 Safari/537.36"
-  }
+ }
 }'
 ```
 
@@ -66,14 +66,14 @@ curl -X POST localhost:8080/auth/login -H "Content-Type: application/json" -d'{
   "context": {
     "ip": "<your ip>",
     "user_agent": "Mozilla/5.0 (Macintosh Intel Mac OS X 10_11_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.87 Safari/537.36"
-  }
+ }
 }'
 ```
 
 ### Verify the OTP
 
 ```bash
-curl -X POST localhost:8080/auth/otp -H "Content-Type: application/json" -d'{  
+curl -X POST localhost:8080/auth/otp -H "Content-Type: application/json" -d'{ 
 "otp_token": "<code you got on phone>",
 "state_token": "<state_token from login/signup response>"
 }'

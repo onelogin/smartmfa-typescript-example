@@ -26,8 +26,8 @@ const AuthRoutes = (userDB) => {
 };
 class AuthRouter {
     constructor(userDB) {
-        // Sign up will establish the user's information in our database and register the MFA device with OneLogin
-        // by sending a OTP that a user will verify
+        // Sign up will establish the user's information in our database and register
+        // the MFA device with OneLogin by sending a OTP that a user will verify
         this.signupRoute = (req, res) => __awaiter(this, void 0, void 0, function* () {
             let missingFields = this.requiredFields(req.body, ["user_identifier", "phone", "password"]);
             if (missingFields) {
@@ -111,8 +111,8 @@ class AuthRouter {
                 res.status(err.response.status).send(err.response.data);
             }
         });
-        // This is where you'd send the otp collected from the user in the calling app and
-        // the state_token to validate the second factor
+        // This is where you'd send the otp collected from the user in the calling app
+        // and the state_token to validate the second factor
         this.otpRoute = (req, res) => __awaiter(this, void 0, void 0, function* () {
             let missingFields = this.requiredFields(req.body, ["otp_token", "state_token"]);
             if (missingFields) {
@@ -142,9 +142,7 @@ class AuthRouter {
                 }
             });
             if (missingFields.length > 0) {
-                return {
-                    message: `required fields ${missingFields.join(" ")} are missing`
-                };
+                return { message: `required fields ${missingFields.join(" ")} are missing` };
             }
         };
         this.userDB = userDB;

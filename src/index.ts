@@ -5,7 +5,7 @@ import axios, {AxiosRequestConfig} from "axios"
 
 import AuthRoutes from "./auth/router"
 import SimpleDatabase from "./database/simple_db"
-import { User } from "./models/user"
+import {User} from "./models/user"
 
 dotenv.config()
 const db = new SimpleDatabase<User>({})
@@ -23,8 +23,8 @@ db.Upsert({
 const port = process.env.PORT || 8080
 const app = express()
 
-app.use( bodyParser.json() )
-app.use( bodyParser.urlencoded({ extended:true }) )
+app.use(bodyParser.json())
+app.use(bodyParser.urlencoded({extended:true}))
 app.use('/auth', AuthRoutes(db))
 app.use('/health', (_, res: Response) => res.status(200).send({status: "up"}))
 
