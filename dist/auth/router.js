@@ -15,38 +15,52 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const axios_1 = __importDefault(require("axios"));
 const onelogin_1 = __importDefault(require("../middleware/onelogin"));
-const AuthRoutes = (db) => {
+const AuthRoutes = (userDB) => {
     const router = express_1.default.Router();
-    const authRouter = new AuthRouter(db);
+    const authRouter = new AuthRouter(userDB);
     router.use(onelogin_1.default);
-    router.post('/login', authRouter.loginRoute);
     router.post('/signup', authRouter.signupRoute);
+    router.post('/login', authRouter.loginRoute);
     router.post('/otp', authRouter.otpRoute);
     return router;
 };
 class AuthRouter {
-    constructor(db) {
-        // Lets begin by registering a user to your app. This will collect a user's
-        // username and phone number. You can also collect a password or other information
-        // but for the purpose of the demo we'll focus on username and phone number.
+    constructor(userDB) {
+        // Sign up will establish the user's information in our database and register the MFA device with OneLogin
+        // by sending a OTP that a user will verify
         this.signupRoute = (req, res) => __awaiter(this, void 0, void 0, function* () {
             let missingFields = this.requiredFields(req.body, ["user_identifier", "phone", "password"]);
-            if (missingFields)
+            if (missingFields) {
                 return res.status(400).json({ error: missingFields });
+            }
             try {
-                let existingUser = this.db.Read(req.body.user_identifier);
-                if (existingUser)
-                    return res.status(400).json({ error: `User with id ${req.body.user_identifier} exists!` });
+                let existingUser = this.userDB.Read(req.body.user_identifier);
+                if (existingUser) {
+                    return res.status(400).json({
+                        error: `User with id ${req.body.user_identifier} exists!`
+                    });
+                }
                 let { user_identifier, phone, password } = req.body;
                 let context = {
                     user_agent: req.headers["user-agent"],
                     ip: req.connection.remoteAddress
                 };
+                // Smart MFA Request to OneLogin
                 let url = `${process.env.ONELOGIN_API_URL}/api/2/smart-mfa/`;
-                let headers = { 'Authorization': `Bearer ${req.olBearerToken}`, 'Content-Type': 'application/json' };
+                let headers = {
+                    'Authorization': `Bearer ${req.olBearerToken}`,
+                    'Content-Type': 'application/json'
+                };
                 let payload = { user_identifier, phone, context };
                 let { status, data } = yield axios_1.default.post(url, payload, { headers });
-                this.db.Upsert({ phone, password, id: user_identifier, userIdentifier: user_identifier });
+                // Persist the user in our database
+                this.userDB.Upsert({
+                    phone,
+                    password,
+                    id: user_identifier,
+                    userIdentifier: user_identifier
+                });
+                // Let client know if a OTP was sent.
                 // data.mfa looks like {otp_sent: true, state_token: 12345}
                 res.status(status).json(data.mfa);
             }
@@ -58,24 +72,38 @@ class AuthRouter {
         // This is called when a user attempts to log in with their username.
         this.loginRoute = (req, res) => __awaiter(this, void 0, void 0, function* () {
             let missingFields = this.requiredFields(req.body, ["user_identifier", "password"]);
-            if (missingFields)
+            if (missingFields) {
                 return res.status(400).json({ error: missingFields });
+            }
             try {
-                let user = this.db.Read(req.body.user_identifier);
-                if (!user)
-                    return res.status(400).json({ error: `User with id ${req.body.user_identifier} not found!` });
-                // DO NOT store plaintext passwords or compare them like this. FOR DEMO PURPOSES ONLY!
-                if (user.password != req.body.password)
+                // Look for existing user and verify the password
+                let user = this.userDB.Read(req.body.user_identifier);
+                if (!user) {
+                    return res.status(400).json({
+                        error: `User with id ${req.body.user_identifier} not found!`
+                    });
+                }
+                // DO NOT store plaintext passwords or compare them like this.
+                // FOR DEMO PURPOSES ONLY!
+                if (user.password != req.body.password) {
                     return res.status(400).json({ error: `Wrong password` });
+                }
                 let { userIdentifier: user_identifier, phone } = user;
                 let context = {
                     user_agent: req.headers["user-agent"],
                     ip: req.connection.remoteAddress
                 };
+                // Use stored user's phone number for request to OneLogin Smart MFA
                 let url = `${process.env.ONELOGIN_API_URL}/api/2/smart-mfa/`;
-                let headers = { 'Authorization': `Bearer ${req.olBearerToken}`, 'Content-Type': 'application/json' };
+                let headers = {
+                    'Authorization': `Bearer ${req.olBearerToken}`,
+                    'Content-Type': 'application/json'
+                };
                 let payload = { user_identifier, phone, context };
                 let { status, data } = yield axios_1.default.post(url, payload, { headers });
+                // Let client know if OTP was sent.
+                // data.mfa looks like {otp_sent: true, state_token: 12345}
+                // or {otp_sent: false}
                 res.status(status).json(data.mfa);
             }
             catch (err) {
@@ -87,8 +115,9 @@ class AuthRouter {
         // the state_token to validate the second factor
         this.otpRoute = (req, res) => __awaiter(this, void 0, void 0, function* () {
             let missingFields = this.requiredFields(req.body, ["otp_token", "state_token"]);
-            if (missingFields)
+            if (missingFields) {
                 return res.status(400).json({ error: missingFields });
+            }
             try {
                 let url = `${process.env.ONELOGIN_API_URL}/api/2/smart-mfa/verify`;
                 let headers = {
@@ -103,8 +132,8 @@ class AuthRouter {
                 res.status(err.response.status).send(err.response.data);
             }
         });
-        // scans the request object for the required fields given.
-        // returns an error if a field is missing
+        // Scans the request object for the required fields given.
+        // Returns an error if a field is missing
         this.requiredFields = (req, fields) => {
             let missingFields = [];
             fields.forEach(field => {
@@ -112,10 +141,13 @@ class AuthRouter {
                     missingFields.push(field);
                 }
             });
-            if (missingFields.length > 0)
-                return { message: `required fields ${missingFields.join(" ")} are missing` };
+            if (missingFields.length > 0) {
+                return {
+                    message: `required fields ${missingFields.join(" ")} are missing`
+                };
+            }
         };
-        this.db = db;
+        this.userDB = userDB;
     }
 }
 exports.default = AuthRoutes;

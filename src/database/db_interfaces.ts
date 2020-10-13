@@ -1,10 +1,10 @@
 export interface DBItem {
-  id: string;
-};
+  id: string
+}
 
-export interface Database<T> {
-  Upsert(entry: T): T;
-  Read(id: string): T;
-  Index(): T[];
-  Delete(id: string): boolean;
+export interface Database<DBItem>{
+  Upsert(entry: DBItem): DBItem
+  Read(id: string): DBItem
+  Index(): DBItem[]
+  Delete(id: string): boolean
 }

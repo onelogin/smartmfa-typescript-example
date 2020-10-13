@@ -1,4 +1,4 @@
-export {}; // make this file a module
+export {} // make this file a module
 
 declare global{
     namespace Express {
