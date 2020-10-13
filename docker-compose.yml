@@ -1,14 +1,21 @@
 version: "3"
 
 services:
-  backend:
+  smartmfa_typescript_example_backend:
     build: .
     tty: true
     stdin_open: true
+    container_name: smartmfa_typescript_example_backend
     volumes:
       - .:/usr/src/app
       - /usr/src/app/node_modules
     ports:
-      - "8080:8080"
+      - "8082:8082"
     env_file:
       - .env
+    networks:
+      - testbed
+
+networks:
+  testbed:
+    external: true

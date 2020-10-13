@@ -1,140 +1,178 @@
-import express, {Request, Response} from 'express';
+import express, {Request, Response} from 'express'
 import axios from 'axios'
+
 import AuthOneLogin from '../middleware/onelogin'
 
-const AuthRoutes = () => {
-  const router = express.Router();
-  router.use(AuthOneLogin);
-  router.post('/login', loginRoute);
-  router.post('/signup', signupRoute);
-  router.post('/otp', otpRoute);
-  return router;
+import {Database} from "../database/db_interfaces"
+import {User} from "../models/user"
+
+const AuthRoutes = (userDB: Database<User>) => {
+  const router = express.Router()
+  const authRouter = new AuthRouter(userDB)
+
+  router.use(AuthOneLogin)
+
+  router.post('/signup', authRouter.signupRoute)
+  router.post('/login', authRouter.loginRoute)
+  router.post('/otp', authRouter.otpRoute)
+
+  return router
 }
 
-// Lets begin by registering a user to your app. This will collect a user's
-// username and phone number. You can also collect a password or other information
-// but for the purpose of the demo we'll focus on username and phone number.
+class AuthRouter {
+  userDB: Database<User>
 
-// Remember that the information (username/email) you send as the 'user_identifier'
-// to OneLogin must be used each time you make the /smart-mfa request.
-const signupRoute = async (req: Request, res: Response) => {
-  let {user_identifier, phone, context} = req.body;
-  let missingFields: Array<string> = [];
-
-  if( !user_identifier ) missingFields.push("user_identifier");
-  if( !phone ) missingFields.push("phone");
-  if( !context ) missingFields.push("context");
-
-  if( missingFields.length > 0 ) {
-    return res.status(400).json({
-      error: { message: `required fields ${missingFields.join(" ")} are missing` }
-    });
+  constructor(userDB: Database<User>) {
+    this.userDB = userDB
   }
-  try{
-    // when establishing the user for the first time, this will create a user in
-    // OneLogin, use your Twilio credentials to send a text message, and give us a state_token
-    let url = `${process.env.ONELOGIN_API_URL}/api/2/smart-mfa/`;
-    let headers = {
-      'Authorization': `Bearer ${req.olBearerToken}`,
-      'Content-Type': 'application/json'
-    };
 
-    let { status, data } = await axios.post( url, req.body, { headers } );
-    // When the user signs up they should get a text with a one time password (OTP)
-    // your calling app will collect this OTP from the user and send it with the
-    // state_token back to the /otp endpoint.
+  // Sign up will establish the user's information in our database and register
+  // the MFA device with OneLogin by sending a OTP that a user will verify
+  signupRoute = async (req: Request, res: Response) => {
+    let missingFields = this.requiredFields(
+      req.body,
+      ["user_identifier", "phone", "password"]
+    )
 
-    // you might attempt to persist the user here or cache the user and state token and await verification.
+    if(missingFields) {
+      return res.status(400).json({error: missingFields})
+    }
 
-    // the data object contains a mfa node that contains the state_token and a flag
-    // indicating if a SMS was sent. You can either simply return data.mfa in the response,
-    // or combine these fields with other elements for your response.
-    // For simplicity, we'll just return the status from OneLogin.
-    res.status(status).json(data.mfa);
+    try {
+      let existingUser = this.userDB.Read(req.body.user_identifier)
+      if(existingUser) {
+        return res.status(400).json({
+          error: `User with id ${req.body.user_identifier} exists!`
+        })
+      }
 
-  } catch(err) {
-    console.log("Error", err.message);
-    res.status(500).send(err.message);
+      let {user_identifier, phone, password} = req.body
+      let context = {
+        user_agent: req.headers["user-agent"],
+        ip: req.connection.remoteAddress
+      }
+
+      // Smart MFA Request to OneLogin
+      let url = `${process.env.ONELOGIN_API_URL}/api/2/smart-mfa/`
+      let headers = {
+        'Authorization': `Bearer ${req.olBearerToken}`,
+        'Content-Type': 'application/json'
+      }
+      let payload = {user_identifier, phone, context}
+
+      let {status, data} = await axios.post(url, payload, {headers})
+
+      // Persist the user in our database
+      this.userDB.Upsert({
+        phone,
+        password,
+        id: user_identifier,
+        userIdentifier: user_identifier
+      })
+
+      // Let client know if a OTP was sent.
+      // data.mfa looks like {otp_sent: true, state_token: 12345}
+      res.status(status).json(data.mfa)
+
+    } catch(err) {
+      console.log("Error", err.response.data)
+      res.status(err.response.status).send(err.response.data)
+    }
+  }
+
+  // This is called when a user attempts to log in with their username.
+  loginRoute = async (req: Request, res: Response) => {
+    let missingFields = this.requiredFields(
+      req.body, ["user_identifier", "password"]
+    )
+
+    if(missingFields) {
+      return res.status(400).json({error: missingFields})
+    }
+
+    try {
+      // Look for existing user and verify the password
+      let user = this.userDB.Read(req.body.user_identifier)
+      if(!user) {
+        return res.status(400).json({
+          error: `User with id ${req.body.user_identifier} not found!`
+        })
+      }
+
+      // DO NOT store plaintext passwords or compare them like this.
+      // FOR DEMO PURPOSES ONLY!
+      if(user.password != req.body.password) {
+        return res.status(400).json({error: `Wrong password`})
+      }
+
+      let {userIdentifier: user_identifier, phone} = user
+      let context = {
+        user_agent: req.headers["user-agent"],
+        ip: req.connection.remoteAddress
+      }
+
+      // Use stored user's phone number for request to OneLogin Smart MFA
+      let url = `${process.env.ONELOGIN_API_URL}/api/2/smart-mfa/`
+      let headers = {
+        'Authorization': `Bearer ${req.olBearerToken}`,
+        'Content-Type': 'application/json'
+      }
+      let payload = {user_identifier, phone, context}
+
+      let {status, data} = await axios.post(url, payload, {headers})
+
+      // Let client know if OTP was sent.
+      // data.mfa looks like {otp_sent: true, state_token: 12345}
+      // or {otp_sent: false}
+      res.status(status).json(data.mfa)
+
+    } catch(err) {
+      console.log("Error", err.response.data)
+      res.status(err.response.status).send(err.response.data)
+    }
+  }
+
+  // This is where you'd send the otp collected from the user in the calling app
+  // and the state_token to validate the second factor
+  otpRoute = async (req: Request, res: Response) => {
+    let missingFields = this.requiredFields(
+      req.body, ["otp_token", "state_token"]
+    )
+
+    if(missingFields) {
+      return res.status(400).json({error: missingFields})
+    }
+
+    try {
+      let url = `${process.env.ONELOGIN_API_URL}/api/2/smart-mfa/verify`
+      let headers = {
+        'Authorization': `Bearer ${req.olBearerToken}`,
+        'Content-Type': 'application/json'
+      }
+
+      let {status, data} = await axios.post(url, req.body, {headers})
+
+      res.status(status).json(data)
+
+    } catch(err) {
+      console.log("Error", err.response.data)
+      res.status(err.response.status).send(err.response.data)
+    }
+  }
+
+  // Scans the request object for the required fields given.
+  // Returns an error if a field is missing
+  requiredFields = (req: object, fields: string[]): object => {
+    let missingFields: Array<string> = []
+    fields.forEach(field => {
+      if(!req.hasOwnProperty(field)) {
+        missingFields.push(field)
+      }
+    })
+    if(missingFields.length > 0) {
+      return {message: `required fields ${missingFields.join(" ")} are missing`}
+    }
   }
 }
 
-// This is called when a user attempts to log in with their username.
-const loginRoute = async (req: Request, res: Response) => {
-  try{
-    // you would check the username and password to authenticate the user here, for example:
-    // let user = UserRepository.find(req.user.user_identifier);
-    // if(!user) {
-    //   return res.status(401).json({
-    //     error: {message: "invalid user_identifier"}
-    //   });
-    // }
-    // if(!user.isAuthenticated(req.user.password)) {
-    //   return res.status(401).json({
-    //     error: {message: "invalid password"}
-    //   });
-    // }
-
-    // this request will leverage the A.I. platform to determine if the user's
-    // behavior (location, time of day, etc...) warrants a secondary SMS factor
-    let url = `${process.env.ONELOGIN_API_URL}/api/2/smart-mfa/`;
-    let headers = {
-      'Authorization': `Bearer ${req.olBearerToken}`,
-      'Content-Type': 'application/json'
-    };
-
-    let { status, data } = await axios.post( url, req.body, { headers } );
-
-    // if the login attempt is deemed risky (e.g. the password was compromised)
-    // we'll send a text to the user and return a state token to your calling app
-
-    // the data object contains a mfa node that contains the state_token and a flag
-    // indicating if a SMS was sent. You can either simply return data.mfa in the response,
-    // or combine these fields with other elements for your response.
-    // This will tell the calling app that a OTP prompt is needed and to which
-    // state_token it should be associated.
-    // For simplicity, we'll just return the status from OneLogin.
-    res.status(status).json(data.mfa);
-
-  } catch(err) {
-    console.log("Error", err.message);
-    res.status(500).send(err.message);
-  }
-}
-
-// This is where you'd send the otp collected from the user in the calling app and
-// the state_token to validate the second factor
-const otpRoute = async (req: Request, res: Response) => {
-  let {otp_token, state_token} = req.body;
-  let missingFields: Array<string> = [];
-
-  if( !otp_token ) missingFields.push("otp_token");
-  if( !state_token ) missingFields.push("state_token");
-
-  if( missingFields.length > 0 ) {
-    return res.status(400).json({
-      error: { message: `required fields ${missingFields.join(" ")} are missing` }
-    });
-  }
-
-  // handle and verify the OTP collected from the user in the calling application
-  try{
-    let url = `${process.env.ONELOGIN_API_URL}/api/2/smart-mfa/verify`;
-    let headers = {
-      'Authorization': `Bearer ${req.olBearerToken}`,
-      'Content-Type': 'application/json'
-    };
-
-    let { status, data } = await axios.post( url, req.body, { headers } );
-
-    // If you cached a new user awaiting OTP verification, and the OTP is verified
-    // you might remove the user from cache to persistent storage here.
-
-    res.status(status).json(data);
-
-  } catch(err) {
-    console.log("Error", err.message);
-    res.status(500).send(err.message);
-  }
-}
-
-export default AuthRoutes;
+export default AuthRoutes
