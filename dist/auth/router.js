@@ -52,6 +52,7 @@ class AuthRouter {
                     'Content-Type': 'application/json'
                 };
                 let payload = { user_identifier, phone, context };
+                console.log(`Started Risk Assessment for ${user_identifier}`);
                 let { status, data } = yield axios_1.default.post(url, payload, { headers });
                 // Persist the user in our database
                 this.userDB.Upsert({
@@ -62,11 +63,18 @@ class AuthRouter {
                 });
                 // Let client know if a OTP was sent.
                 // data.mfa looks like {otp_sent: true, state_token: 12345}
+                console.log(`Completed Risk Assessment for ${user_identifier}`);
                 res.status(status).json(data.mfa);
             }
             catch (err) {
-                console.log("Error", err.response.data);
-                res.status(err.response.status).send(err.response.data);
+                if (err.response.status < 500) {
+                    console.log("Bad Request to OneLogin", err.response.data);
+                    res.status(err.response.status).send(err.response.data);
+                }
+                else {
+                    console.log("Unable to Connect to OneLogin", err.response.data);
+                    res.status(500).send(err.response.data);
+                }
             }
         });
         // This is called when a user attempts to log in with their username.
@@ -100,15 +108,23 @@ class AuthRouter {
                     'Content-Type': 'application/json'
                 };
                 let payload = { user_identifier, phone, context };
+                console.log(`Started Risk Assessment for ${user_identifier}`);
                 let { status, data } = yield axios_1.default.post(url, payload, { headers });
                 // Let client know if OTP was sent.
                 // data.mfa looks like {otp_sent: true, state_token: 12345}
                 // or {otp_sent: false}
+                console.log(`Completed Risk Assessment for ${user_identifier}`);
                 res.status(status).json(data.mfa);
             }
             catch (err) {
-                console.log("Error", err.response.data);
-                res.status(err.response.status).send(err.response.data);
+                if (err.response.status < 500) {
+                    console.log("Bad Request to OneLogin", err.response.data);
+                    res.status(err.response.status).send(err.response.data);
+                }
+                else {
+                    console.log("Unable to Connect to OneLogin", err.response.data);
+                    res.status(500).send(err.response.data);
+                }
             }
         });
         // This is where you'd send the otp collected from the user in the calling app
@@ -124,12 +140,20 @@ class AuthRouter {
                     'Authorization': `Bearer ${req.olBearerToken}`,
                     'Content-Type': 'application/json'
                 };
+                console.log("Validating OTP with OneLogin");
                 let { status, data } = yield axios_1.default.post(url, req.body, { headers });
+                console.log("OTP Validation Done!");
                 res.status(status).json(data);
             }
             catch (err) {
-                console.log("Error", err.response.data);
-                res.status(err.response.status).send(err.response.data);
+                if (err.response.status < 500) {
+                    console.log("OneLogin unable to validate OTP", err.response.data);
+                    res.status(err.response.status).send(err.response.data);
+                }
+                else {
+                    console.log("Unable to Connect to OneLogin", err.response.data);
+                    res.status(500).send(err.response.data);
+                }
             }
         });
         // Scans the request object for the required fields given.

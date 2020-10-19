@@ -60,6 +60,7 @@ class AuthRouter {
       }
       let payload = {user_identifier, phone, context}
 
+      console.log(`Started Risk Assessment for ${user_identifier}`)
       let {status, data} = await axios.post(url, payload, {headers})
 
       // Persist the user in our database
@@ -72,6 +73,7 @@ class AuthRouter {
 
       // Let client know if a OTP was sent.
       // data.mfa looks like {otp_sent: true, state_token: 12345}
+      console.log(`Completed Risk Assessment for ${user_identifier}`)
       res.status(status).json(data.mfa)
 
     } catch(err) {
@@ -124,11 +126,13 @@ class AuthRouter {
       }
       let payload = {user_identifier, phone, context}
 
+      console.log(`Started Risk Assessment for ${user_identifier}`)
       let {status, data} = await axios.post(url, payload, {headers})
 
       // Let client know if OTP was sent.
       // data.mfa looks like {otp_sent: true, state_token: 12345}
       // or {otp_sent: false}
+      console.log(`Completed Risk Assessment for ${user_identifier}`)
       res.status(status).json(data.mfa)
 
     } catch(err) {
@@ -160,13 +164,15 @@ class AuthRouter {
         'Content-Type': 'application/json'
       }
 
+      console.log("Validating OTP with OneLogin")
       let {status, data} = await axios.post(url, req.body, {headers})
 
+      console.log("OTP Validation Done!")
       res.status(status).json(data)
 
     } catch(err) {
       if(err.response.status < 500){
-        console.log("Bad Request to OneLogin", err.response.data)
+        console.log("OneLogin unable to validate OTP", err.response.data)
         res.status(err.response.status).send(err.response.data)
       } else {
         console.log("Unable to Connect to OneLogin", err.response.data)
