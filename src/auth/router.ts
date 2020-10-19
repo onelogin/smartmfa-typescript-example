@@ -75,8 +75,13 @@ class AuthRouter {
       res.status(status).json(data.mfa)
 
     } catch(err) {
-      console.log("Error", err.response.data)
-      res.status(err.response.status).send(err.response.data)
+      if(err.response.status < 500){
+        console.log("Bad Request to OneLogin", err.response.data)
+        res.status(err.response.status).send(err.response.data)
+      } else {
+        console.log("Unable to Connect to OneLogin", err.response.data)
+        res.status(500).send(err.response.data)
+      }
     }
   }
 
@@ -127,8 +132,13 @@ class AuthRouter {
       res.status(status).json(data.mfa)
 
     } catch(err) {
-      console.log("Error", err.response.data)
-      res.status(err.response.status).send(err.response.data)
+      if(err.response.status < 500){
+        console.log("Bad Request to OneLogin", err.response.data)
+        res.status(err.response.status).send(err.response.data)
+      } else {
+        console.log("Unable to Connect to OneLogin", err.response.data)
+        res.status(500).send(err.response.data)
+      }
     }
   }
 
@@ -155,8 +165,13 @@ class AuthRouter {
       res.status(status).json(data)
 
     } catch(err) {
-      console.log("Error", err.response.data)
-      res.status(err.response.status).send(err.response.data)
+      if(err.response.status < 500){
+        console.log("Bad Request to OneLogin", err.response.data)
+        res.status(err.response.status).send(err.response.data)
+      } else {
+        console.log("Unable to Connect to OneLogin", err.response.data)
+        res.status(500).send(err.response.data)
+      }
     }
   }
 
