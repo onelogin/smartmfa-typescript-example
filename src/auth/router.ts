@@ -1,4 +1,5 @@
 import express, {Request, Response} from 'express'
+import { Client } from 'onelogin-node-sdk'
 import axios from 'axios'
 
 import AuthOneLogin from '../middleware/onelogin'
@@ -6,11 +7,9 @@ import AuthOneLogin from '../middleware/onelogin'
 import {Database} from "../database/db_interfaces"
 import {User} from "../models/user"
 
-const AuthRoutes = (userDB: Database<User>) => {
+const AuthRoutes = (routerOptions: RouterOptions) => {
   const router = express.Router()
-  const authRouter = new AuthRouter(userDB)
-
-  router.use(AuthOneLogin)
+  const authRouter = new AuthRouter(routerOptions)
 
   router.post('/signup', authRouter.signupRoute)
   router.post('/login', authRouter.loginRoute)
@@ -19,11 +18,20 @@ const AuthRoutes = (userDB: Database<User>) => {
   return router
 }
 
+interface RouterOptions {
+  dataStore: Database<User>;
+  external: {
+    onelogin?: Client
+  }
+}
+
 class AuthRouter {
   userDB: Database<User>
+  oneLoginClient: Client
 
-  constructor(userDB: Database<User>) {
-    this.userDB = userDB
+  constructor(routerOptions: RouterOptions) {
+    this.userDB = routerOptions.dataStore
+    this.oneLoginClient = routerOptions.external.onelogin
   }
 
   // Sign up will establish the user's information in our database and register
@@ -52,16 +60,9 @@ class AuthRouter {
         ip: req.connection.remoteAddress
       }
 
-      // Smart MFA Request to OneLogin
-      let url = `${process.env.ONELOGIN_API_URL}/api/2/smart-mfa/`
-      let headers = {
-        'Authorization': `Bearer ${req.olBearerToken}`,
-        'Content-Type': 'application/json'
-      }
-      let payload = {user_identifier, phone, context}
-
-      console.log(`Started Risk Assessment for ${user_identifier}`)
-      let {status, data} = await axios.post(url, payload, {headers})
+      let data = await this.oneLoginClient.smartMFA.CheckMFARequired({
+        user_identifier, phone, context
+      })
 
       // Persist the user in our database
       this.userDB.Upsert({
@@ -74,12 +75,12 @@ class AuthRouter {
       // Let client know if a OTP was sent.
       // data.mfa looks like {otp_sent: true, state_token: 12345}
       console.log(`Completed Risk Assessment for ${user_identifier}`)
-      res.status(status).json(data.mfa)
+      res.status(200).json(data.mfa)
 
     } catch(err) {
       if(err.response.status < 500){
         console.log("Bad Request to OneLogin", err.response.data)
-        res.status(err.response.status).send(err.response.data)
+        res.status(500).send(err.response.data)
       } else {
         console.log("Unable to Connect to OneLogin", err.response.data)
         res.status(500).send(err.response.data)
@@ -118,22 +119,15 @@ class AuthRouter {
         ip: req.connection.remoteAddress
       }
 
-      // Use stored user's phone number for request to OneLogin Smart MFA
-      let url = `${process.env.ONELOGIN_API_URL}/api/2/smart-mfa/`
-      let headers = {
-        'Authorization': `Bearer ${req.olBearerToken}`,
-        'Content-Type': 'application/json'
-      }
-      let payload = {user_identifier, phone, context}
-
-      console.log(`Started Risk Assessment for ${user_identifier}`)
-      let {status, data} = await axios.post(url, payload, {headers})
+      let data = await this.oneLoginClient.smartMFA.CheckMFARequired({
+        user_identifier, phone, context
+      })
 
       // Let client know if OTP was sent.
       // data.mfa looks like {otp_sent: true, state_token: 12345}
       // or {otp_sent: false}
       console.log(`Completed Risk Assessment for ${user_identifier}`)
-      res.status(status).json(data.mfa)
+      res.status(200).json(data.mfa)
 
     } catch(err) {
       if(err.response.status < 500){
@@ -158,17 +152,10 @@ class AuthRouter {
     }
 
     try {
-      let url = `${process.env.ONELOGIN_API_URL}/api/2/smart-mfa/verify`
-      let headers = {
-        'Authorization': `Bearer ${req.olBearerToken}`,
-        'Content-Type': 'application/json'
-      }
-
-      console.log("Validating OTP with OneLogin")
-      let {status, data} = await axios.post(url, req.body, {headers})
+      let data = await this.oneLoginClient.smartMFA.ValidateOTP({ ...req.body })
 
       console.log("OTP Validation Done!")
-      res.status(status).json(data)
+      res.status(200).json(data)
 
     } catch(err) {
       if(err.response.status < 500){
