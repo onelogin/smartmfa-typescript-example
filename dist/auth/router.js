@@ -42,9 +42,12 @@ class AuthRouter {
                     user_agent: req.headers["user-agent"],
                     ip: req.connection.remoteAddress
                 };
-                let data = yield this.oneLoginClient.smartMFA.CheckMFARequired({
+                let { data, error } = yield this.oneLoginClient.smartMFA.CheckMFARequired({
                     user_identifier, phone, context
                 });
+                if (error) {
+                    res.status(error.httpStatusCode).json(error.data);
+                }
                 // Persist the user in our database
                 this.userDB.Upsert({
                     phone,
@@ -92,9 +95,12 @@ class AuthRouter {
                     user_agent: req.headers["user-agent"],
                     ip: req.connection.remoteAddress
                 };
-                let data = yield this.oneLoginClient.smartMFA.CheckMFARequired({
+                let { data, error } = yield this.oneLoginClient.smartMFA.CheckMFARequired({
                     user_identifier, phone, context
                 });
+                if (error) {
+                    res.status(error.httpStatusCode).json(error.data);
+                }
                 // Let client know if OTP was sent.
                 // data.mfa looks like {otp_sent: true, state_token: 12345}
                 // or {otp_sent: false}

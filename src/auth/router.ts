@@ -1,11 +1,8 @@
-import express, {Request, Response} from 'express'
+import express, { Request, Response } from 'express'
 import { Client } from 'onelogin-node-sdk'
-import axios from 'axios'
 
-import AuthOneLogin from '../middleware/onelogin'
-
-import {Database} from "../database/db_interfaces"
-import {User} from "../models/user"
+import { Database } from "../database/db_interfaces"
+import { User } from "../models/user"
 
 const AuthRoutes = (routerOptions: RouterOptions) => {
   const router = express.Router()
@@ -20,9 +17,7 @@ const AuthRoutes = (routerOptions: RouterOptions) => {
 
 interface RouterOptions {
   dataStore: Database<User>;
-  external: {
-    onelogin?: Client
-  }
+  external: { onelogin?: Client }
 }
 
 class AuthRouter {
@@ -60,10 +55,12 @@ class AuthRouter {
         ip: req.connection.remoteAddress
       }
 
-      let data = await this.oneLoginClient.smartMFA.CheckMFARequired({
+      let { data, error } = await this.oneLoginClient.smartMFA.CheckMFARequired({
         user_identifier, phone, context
       })
-
+      if( error ){
+        res.status(error.httpStatusCode).json(error.data)
+      }
       // Persist the user in our database
       this.userDB.Upsert({
         phone,
@@ -119,10 +116,12 @@ class AuthRouter {
         ip: req.connection.remoteAddress
       }
 
-      let data = await this.oneLoginClient.smartMFA.CheckMFARequired({
+      let { data, error } = await this.oneLoginClient.smartMFA.CheckMFARequired({
         user_identifier, phone, context
       })
-
+      if( error ){
+        res.status(error.httpStatusCode).json(error.data)
+      }
       // Let client know if OTP was sent.
       // data.mfa looks like {otp_sent: true, state_token: 12345}
       // or {otp_sent: false}
