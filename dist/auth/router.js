@@ -13,26 +13,22 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
-const axios_1 = __importDefault(require("axios"));
-const onelogin_1 = __importDefault(require("../middleware/onelogin"));
-const AuthRoutes = (userDB) => {
+const AuthRoutes = (routerOptions) => {
     const router = express_1.default.Router();
-    const authRouter = new AuthRouter(userDB);
-    router.use(onelogin_1.default);
+    const authRouter = new AuthRouter(routerOptions);
     router.post('/signup', authRouter.signupRoute);
     router.post('/login', authRouter.loginRoute);
     router.post('/otp', authRouter.otpRoute);
     return router;
 };
 class AuthRouter {
-    constructor(userDB) {
+    constructor(routerOptions) {
         // Sign up will establish the user's information in our database and register
         // the MFA device with OneLogin by sending a OTP that a user will verify
         this.signupRoute = (req, res) => __awaiter(this, void 0, void 0, function* () {
             let missingFields = this.requiredFields(req.body, ["user_identifier", "phone", "password"]);
-            if (missingFields) {
+            if (missingFields)
                 return res.status(400).json({ error: missingFields });
-            }
             try {
                 let existingUser = this.userDB.Read(req.body.user_identifier);
                 if (existingUser) {
@@ -42,19 +38,15 @@ class AuthRouter {
                 }
                 let { user_identifier, phone, password } = req.body;
                 let context = {
-                    user_agent: req.headers["user-agent"],
-                    ip: req.connection.remoteAddress
+                    user_agent: req.body.context['user_agent'] || req.headers["user-agent"],
+                    ip: req.body.context['ip'] || req.connection.remoteAddress
                 };
-                // Smart MFA Request to OneLogin
-                let url = `${process.env.ONELOGIN_API_URL}/api/2/smart-mfa/`;
-                let headers = {
-                    'Authorization': `Bearer ${req.olBearerToken}`,
-                    'Content-Type': 'application/json'
-                };
-                let payload = { user_identifier, phone, context };
-                console.log(`Started Risk Assessment for ${user_identifier}`);
-                let { status, data } = yield axios_1.default.post(url, payload, { headers });
-                // Persist the user in our database
+                let { data, error } = yield this.oneLoginClient.smartMFA.CheckMFARequired({
+                    user_identifier, phone, context
+                });
+                if (error)
+                    return res.status(error.httpStatusCode).json(error.data);
+                // Persist the user
                 this.userDB.Upsert({
                     phone,
                     password,
@@ -64,25 +56,18 @@ class AuthRouter {
                 // Let client know if a OTP was sent.
                 // data.mfa looks like {otp_sent: true, state_token: 12345}
                 console.log(`Completed Risk Assessment for ${user_identifier}`);
-                res.status(status).json(data.mfa);
+                return res.status(200).json(data.mfa);
             }
             catch (err) {
-                if (err.response.status < 500) {
-                    console.log("Bad Request to OneLogin", err.response.data);
-                    res.status(err.response.status).send(err.response.data);
-                }
-                else {
-                    console.log("Unable to Connect to OneLogin", err.response.data);
-                    res.status(500).send(err.response.data);
-                }
+                console.log("An unknown error occurred", err);
+                return res.status(500).send(err.message);
             }
         });
         // This is called when a user attempts to log in with their username.
         this.loginRoute = (req, res) => __awaiter(this, void 0, void 0, function* () {
             let missingFields = this.requiredFields(req.body, ["user_identifier", "password"]);
-            if (missingFields) {
+            if (missingFields)
                 return res.status(400).json({ error: missingFields });
-            }
             try {
                 // Look for existing user and verify the password
                 let user = this.userDB.Read(req.body.user_identifier);
@@ -98,62 +83,39 @@ class AuthRouter {
                 }
                 let { userIdentifier: user_identifier, phone } = user;
                 let context = {
-                    user_agent: req.headers["user-agent"],
-                    ip: req.connection.remoteAddress
+                    user_agent: req.body.context['user_agent'] || req.headers["user-agent"],
+                    ip: req.body.context['ip'] || req.connection.remoteAddress
                 };
-                // Use stored user's phone number for request to OneLogin Smart MFA
-                let url = `${process.env.ONELOGIN_API_URL}/api/2/smart-mfa/`;
-                let headers = {
-                    'Authorization': `Bearer ${req.olBearerToken}`,
-                    'Content-Type': 'application/json'
-                };
-                let payload = { user_identifier, phone, context };
-                console.log(`Started Risk Assessment for ${user_identifier}`);
-                let { status, data } = yield axios_1.default.post(url, payload, { headers });
+                let { data, error } = yield this.oneLoginClient.smartMFA.CheckMFARequired({
+                    user_identifier, phone, context
+                });
+                if (error)
+                    return res.status(error.httpStatusCode).json(error.data);
                 // Let client know if OTP was sent.
                 // data.mfa looks like {otp_sent: true, state_token: 12345}
                 // or {otp_sent: false}
                 console.log(`Completed Risk Assessment for ${user_identifier}`);
-                res.status(status).json(data.mfa);
+                return res.status(200).json(data.mfa);
             }
             catch (err) {
-                if (err.response.status < 500) {
-                    console.log("Bad Request to OneLogin", err.response.data);
-                    res.status(err.response.status).send(err.response.data);
-                }
-                else {
-                    console.log("Unable to Connect to OneLogin", err.response.data);
-                    res.status(500).send(err.response.data);
-                }
+                console.log("An unknown error occurred", err);
+                return res.status(500).send(err.message);
             }
         });
         // This is where you'd send the otp collected from the user in the calling app
         // and the state_token to validate the second factor
         this.otpRoute = (req, res) => __awaiter(this, void 0, void 0, function* () {
             let missingFields = this.requiredFields(req.body, ["otp_token", "state_token"]);
-            if (missingFields) {
+            if (missingFields)
                 return res.status(400).json({ error: missingFields });
-            }
             try {
-                let url = `${process.env.ONELOGIN_API_URL}/api/2/smart-mfa/verify`;
-                let headers = {
-                    'Authorization': `Bearer ${req.olBearerToken}`,
-                    'Content-Type': 'application/json'
-                };
-                console.log("Validating OTP with OneLogin");
-                let { status, data } = yield axios_1.default.post(url, req.body, { headers });
+                let data = yield this.oneLoginClient.smartMFA.ValidateOTP(Object.assign({}, req.body));
                 console.log("OTP Validation Done!");
-                res.status(status).json(data);
+                return res.status(200).json(data);
             }
             catch (err) {
-                if (err.response.status < 500) {
-                    console.log("OneLogin unable to validate OTP", err.response.data);
-                    res.status(err.response.status).send(err.response.data);
-                }
-                else {
-                    console.log("Unable to Connect to OneLogin", err.response.data);
-                    res.status(500).send(err.response.data);
-                }
+                console.log("An unknown error occurred", err);
+                return res.status(500).send(err.message);
             }
         });
         // Scans the request object for the required fields given.
@@ -161,15 +123,15 @@ class AuthRouter {
         this.requiredFields = (req, fields) => {
             let missingFields = [];
             fields.forEach(field => {
-                if (!req.hasOwnProperty(field)) {
+                if (!req.hasOwnProperty(field))
                     missingFields.push(field);
-                }
             });
             if (missingFields.length > 0) {
                 return { message: `required fields ${missingFields.join(" ")} are missing` };
             }
         };
-        this.userDB = userDB;
+        this.userDB = routerOptions.dataStore;
+        this.oneLoginClient = routerOptions.external.onelogin;
     }
 }
 exports.default = AuthRoutes;
