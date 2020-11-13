@@ -27,9 +27,8 @@ class AuthRouter {
         // the MFA device with OneLogin by sending a OTP that a user will verify
         this.signupRoute = (req, res) => __awaiter(this, void 0, void 0, function* () {
             let missingFields = this.requiredFields(req.body, ["user_identifier", "phone", "password"]);
-            if (missingFields) {
+            if (missingFields)
                 return res.status(400).json({ error: missingFields });
-            }
             try {
                 let existingUser = this.userDB.Read(req.body.user_identifier);
                 if (existingUser) {
@@ -39,16 +38,15 @@ class AuthRouter {
                 }
                 let { user_identifier, phone, password } = req.body;
                 let context = {
-                    user_agent: req.headers["user-agent"],
-                    ip: req.connection.remoteAddress
+                    user_agent: req.body.context['user_agent'] || req.headers["user-agent"],
+                    ip: req.body.context['ip'] || req.connection.remoteAddress
                 };
                 let { data, error } = yield this.oneLoginClient.smartMFA.CheckMFARequired({
                     user_identifier, phone, context
                 });
-                if (error) {
-                    res.status(error.httpStatusCode).json(error.data);
-                }
-                // Persist the user in our database
+                if (error)
+                    return res.status(error.httpStatusCode).json(error.data);
+                // Persist the user
                 this.userDB.Upsert({
                     phone,
                     password,
@@ -58,25 +56,18 @@ class AuthRouter {
                 // Let client know if a OTP was sent.
                 // data.mfa looks like {otp_sent: true, state_token: 12345}
                 console.log(`Completed Risk Assessment for ${user_identifier}`);
-                res.status(200).json(data.mfa);
+                return res.status(200).json(data.mfa);
             }
             catch (err) {
-                if (err.response.status < 500) {
-                    console.log("Bad Request to OneLogin", err.response.data);
-                    res.status(500).send(err.response.data);
-                }
-                else {
-                    console.log("Unable to Connect to OneLogin", err.response.data);
-                    res.status(500).send(err.response.data);
-                }
+                console.log("An unknown error occurred", err);
+                return res.status(500).send(err.message);
             }
         });
         // This is called when a user attempts to log in with their username.
         this.loginRoute = (req, res) => __awaiter(this, void 0, void 0, function* () {
             let missingFields = this.requiredFields(req.body, ["user_identifier", "password"]);
-            if (missingFields) {
+            if (missingFields)
                 return res.status(400).json({ error: missingFields });
-            }
             try {
                 // Look for existing user and verify the password
                 let user = this.userDB.Read(req.body.user_identifier);
@@ -92,53 +83,39 @@ class AuthRouter {
                 }
                 let { userIdentifier: user_identifier, phone } = user;
                 let context = {
-                    user_agent: req.headers["user-agent"],
-                    ip: req.connection.remoteAddress
+                    user_agent: req.body.context['user_agent'] || req.headers["user-agent"],
+                    ip: req.body.context['ip'] || req.connection.remoteAddress
                 };
                 let { data, error } = yield this.oneLoginClient.smartMFA.CheckMFARequired({
                     user_identifier, phone, context
                 });
-                if (error) {
-                    res.status(error.httpStatusCode).json(error.data);
-                }
+                if (error)
+                    return res.status(error.httpStatusCode).json(error.data);
                 // Let client know if OTP was sent.
                 // data.mfa looks like {otp_sent: true, state_token: 12345}
                 // or {otp_sent: false}
                 console.log(`Completed Risk Assessment for ${user_identifier}`);
-                res.status(200).json(data.mfa);
+                return res.status(200).json(data.mfa);
             }
             catch (err) {
-                if (err.response.status < 500) {
-                    console.log("Bad Request to OneLogin", err.response.data);
-                    res.status(err.response.status).send(err.response.data);
-                }
-                else {
-                    console.log("Unable to Connect to OneLogin", err.response.data);
-                    res.status(500).send(err.response.data);
-                }
+                console.log("An unknown error occurred", err);
+                return res.status(500).send(err.message);
             }
         });
         // This is where you'd send the otp collected from the user in the calling app
         // and the state_token to validate the second factor
         this.otpRoute = (req, res) => __awaiter(this, void 0, void 0, function* () {
             let missingFields = this.requiredFields(req.body, ["otp_token", "state_token"]);
-            if (missingFields) {
+            if (missingFields)
                 return res.status(400).json({ error: missingFields });
-            }
             try {
                 let data = yield this.oneLoginClient.smartMFA.ValidateOTP(Object.assign({}, req.body));
                 console.log("OTP Validation Done!");
-                res.status(200).json(data);
+                return res.status(200).json(data);
             }
             catch (err) {
-                if (err.response.status < 500) {
-                    console.log("OneLogin unable to validate OTP", err.response.data);
-                    res.status(err.response.status).send(err.response.data);
-                }
-                else {
-                    console.log("Unable to Connect to OneLogin", err.response.data);
-                    res.status(500).send(err.response.data);
-                }
+                console.log("An unknown error occurred", err);
+                return res.status(500).send(err.message);
             }
         });
         // Scans the request object for the required fields given.
@@ -146,9 +123,8 @@ class AuthRouter {
         this.requiredFields = (req, fields) => {
             let missingFields = [];
             fields.forEach(field => {
-                if (!req.hasOwnProperty(field)) {
+                if (!req.hasOwnProperty(field))
                     missingFields.push(field);
-                }
             });
             if (missingFields.length > 0) {
                 return { message: `required fields ${missingFields.join(" ")} are missing` };
