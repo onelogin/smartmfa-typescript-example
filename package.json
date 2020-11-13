@@ -16,7 +16,7 @@
     "btoa": "^1.2.1",
     "eslint": "^7.10.0",
     "express": "^4.17.1",
-    "redis": "^3.0.2"
+    "onelogin-node-sdk": "file:../../onelogin-node-sdk"
   },
   "devDependencies": {
     "@types/express": "^4.17.8",

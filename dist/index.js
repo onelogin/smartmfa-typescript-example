@@ -25,12 +25,31 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const dotenv = __importStar(require("dotenv"));
 const express_1 = __importDefault(require("express"));
 const body_parser_1 = __importDefault(require("body-parser"));
+const onelogin_node_sdk_1 = require("onelogin-node-sdk");
 const router_1 = __importDefault(require("./auth/router"));
+const simple_db_1 = __importDefault(require("./database/simple_db"));
 dotenv.config();
+const db = new simple_db_1.default({});
+// here's an existing user who hasn't registered mfa with OneLogin.
+// added to simulate experience of adding mfa to app with existing data.
+// Should get prompted for otp.
+db.Upsert({
+    id: "test@onelogin.com",
+    userIdentifier: "test@onelogin.com",
+    password: "12345",
+    phone: "13125551234",
+});
+const onelogin = new onelogin_node_sdk_1.Client({
+    clientID: process.env.ONELOGIN_CLIENT_ID,
+    clientSecret: process.env.ONELOGIN_CLIENT_SECRET,
+    baseURL: process.env.ONELOGIN_API_URL,
+    timeout: 30000
+});
 const port = process.env.PORT || 8080;
 const app = express_1.default();
 app.use(body_parser_1.default.json());
 app.use(body_parser_1.default.urlencoded({ extended: true }));
-app.use('/auth', router_1.default());
+app.use('/auth', router_1.default({ dataStore: db, external: { onelogin } }));
+app.use('/health', (_, res) => res.status(200).send({ status: "up" }));
 app.listen(port, () => console.log(`Running on port ${port}`));
 //# sourceMappingURL=index.js.map
