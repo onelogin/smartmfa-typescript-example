@@ -17,7 +17,7 @@ const db = new SimpleDatabase<User>({})
 // Should get prompted for otp.
 db.Upsert({
   id: "test@onelogin.com",
-  userIdentifier: "test@onelogin.com",
+  email: "test@onelogin.com",
   password: "12345",
   phone: "13125551234", // for a good time, put your phone number here
 })
