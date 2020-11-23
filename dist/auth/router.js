@@ -26,17 +26,17 @@ class AuthRouter {
         // Sign up will establish the user's information in our database and register
         // the MFA device with OneLogin by sending a OTP that a user will verify
         this.signupRoute = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            let missingFields = this.requiredFields(req.body, ["user_identifier", "phone", "password"]);
+            let missingFields = this.requiredFields(req.body, ["email", "phone", "password"]);
             if (missingFields)
                 return res.status(400).json({ error: missingFields });
             try {
-                let existingUser = this.userDB.Read(req.body.user_identifier);
+                let existingUser = this.userDB.Read(req.body.email);
                 if (existingUser) {
                     return res.status(400).json({
-                        error: `User with id ${req.body.user_identifier} exists!`
+                        error: `User with id ${req.body.email} exists!`
                     });
                 }
-                let { user_identifier, phone, password } = req.body;
+                let { email: user_identifier, phone, password } = req.body;
                 let context = {
                     user_agent: req.headers["user-agent"],
                     ip: req.connection.remoteAddress
@@ -51,7 +51,7 @@ class AuthRouter {
                     phone,
                     password,
                     id: user_identifier,
-                    userIdentifier: user_identifier
+                    email: user_identifier
                 });
                 // Let client know if a OTP was sent.
                 // data.mfa looks like {otp_sent: true, state_token: 12345}
@@ -65,15 +65,15 @@ class AuthRouter {
         });
         // This is called when a user attempts to log in with their username.
         this.loginRoute = (req, res) => __awaiter(this, void 0, void 0, function* () {
-            let missingFields = this.requiredFields(req.body, ["user_identifier", "password"]);
+            let missingFields = this.requiredFields(req.body, ["email", "password"]);
             if (missingFields)
                 return res.status(400).json({ error: missingFields });
             try {
                 // Look for existing user and verify the password
-                let user = this.userDB.Read(req.body.user_identifier);
+                let user = this.userDB.Read(req.body.email);
                 if (!user) {
                     return res.status(400).json({
-                        error: `User with id ${req.body.user_identifier} not found!`
+                        error: `User with id ${req.body.email} not found!`
                     });
                 }
                 // DO NOT store plaintext passwords or compare them like this.
@@ -81,10 +81,10 @@ class AuthRouter {
                 if (user.password != req.body.password) {
                     return res.status(400).json({ error: `Wrong password` });
                 }
-                let { userIdentifier: user_identifier, phone } = user;
+                let { email: user_identifier, phone } = user;
                 let context = {
-                    user_agent: req.body.context['user_agent'] || req.headers["user-agent"],
-                    ip: req.body.context['ip'] || req.connection.remoteAddress
+                    user_agent: req.headers["user-agent"],
+                    ip: req.connection.remoteAddress
                 };
                 let { data, error } = yield this.oneLoginClient.smartMFA.CheckMFARequired({
                     user_identifier, phone, context
