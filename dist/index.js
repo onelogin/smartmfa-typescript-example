@@ -25,7 +25,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const dotenv = __importStar(require("dotenv"));
 const express_1 = __importDefault(require("express"));
 const body_parser_1 = __importDefault(require("body-parser"));
-const onelogin_node_sdk_1 = require("onelogin-node-sdk");
+const sdk_1 = require("@onelogin/sdk");
 const router_1 = __importDefault(require("./auth/router"));
 const simple_db_1 = __importDefault(require("./database/simple_db"));
 dotenv.config();
@@ -39,7 +39,7 @@ db.Upsert({
     password: "12345",
     phone: "13125551234",
 });
-const onelogin = new onelogin_node_sdk_1.Client({
+const onelogin = new sdk_1.Client({
     clientID: process.env.ONELOGIN_CLIENT_ID,
     clientSecret: process.env.ONELOGIN_CLIENT_SECRET,
     baseURL: process.env.ONELOGIN_API_URL,

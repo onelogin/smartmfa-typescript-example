@@ -1,5 +1,5 @@
 import express, { Request, Response } from 'express'
-import { Client } from 'onelogin-node-sdk'
+import { Client } from '@onelogin/sdk'
 
 import { Database } from "../database/db_interfaces"
 import { User } from "../models/user"
@@ -45,8 +45,8 @@ class AuthRouter {
 
       let { user_identifier, phone, password } = req.body
       let context = {
-        user_agent: req.body.context['user_agent'] || req.headers["user-agent"],
-        ip: req.body.context['ip'] || req.connection.remoteAddress
+        user_agent: req.headers["user-agent"],
+        ip: req.connection.remoteAddress
       }
 
       let { data, error } = await this.oneLoginClient.smartMFA.CheckMFARequired({
@@ -127,7 +127,7 @@ class AuthRouter {
       let data = await this.oneLoginClient.smartMFA.ValidateOTP( { ...req.body } )
       console.log("OTP Validation Done!")
       return res.status(200).json(data)
-      
+
     } catch( err ) {
       console.log("An unknown error occurred", err)
       return res.status(500).send(err.message)

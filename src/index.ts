@@ -3,7 +3,7 @@ import express, {Response} from "express"
 import bodyParser from "body-parser"
 import axios, {AxiosRequestConfig} from "axios"
 
-import { Client } from 'onelogin-node-sdk'
+import { Client } from '@onelogin/sdk'
 
 import AuthRoutes from "./auth/router"
 import SimpleDatabase from "./database/simple_db"
