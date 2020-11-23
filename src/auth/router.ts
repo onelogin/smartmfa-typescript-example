@@ -96,8 +96,8 @@ class AuthRouter {
 
       let { userIdentifier: user_identifier, phone } = user
       let context = {
-        user_agent: req.body.context['user_agent'] || req.headers["user-agent"],
-        ip: req.body.context['ip'] || req.connection.remoteAddress
+        user_agent: req.headers["user-agent"],
+        ip: req.connection.remoteAddress
       }
 
       let { data, error } = await this.oneLoginClient.smartMFA.CheckMFARequired({
