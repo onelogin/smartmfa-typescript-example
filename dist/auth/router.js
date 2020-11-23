@@ -38,8 +38,8 @@ class AuthRouter {
                 }
                 let { user_identifier, phone, password } = req.body;
                 let context = {
-                    user_agent: req.body.context['user_agent'] || req.headers["user-agent"],
-                    ip: req.body.context['ip'] || req.connection.remoteAddress
+                    user_agent: req.headers["user-agent"],
+                    ip: req.connection.remoteAddress
                 };
                 let { data, error } = yield this.oneLoginClient.smartMFA.CheckMFARequired({
                     user_identifier, phone, context
